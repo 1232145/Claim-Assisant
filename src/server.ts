@@ -152,6 +152,10 @@ export async function handleRequest(request: IncomingMessage, response: ServerRe
   }
 }
 
+// Also expose the request handler as the module default so Vercel can safely
+// recognize this shared module if it traces it as a Node server entrypoint.
+export default handleRequest;
+
 export function createAppServer() {
   return createServer(handleRequest);
 }
