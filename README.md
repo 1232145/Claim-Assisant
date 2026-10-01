@@ -34,3 +34,22 @@ npm run build
 ```
 
 The API and static UI are served together by `npm run dev`. The workflow keeps claim details behind identity verification and obtains claim facts only from the fixture services.
+
+## Deploy to Vercel
+
+This repository includes a Vercel serverless entrypoint in `api/index.ts` and a `vercel.json` configuration that bundles the fixture data.
+
+1. Import the GitHub repository into Vercel.
+2. Keep the default build command as `npm run build`.
+3. Add these server-side environment variables in the Vercel project settings:
+
+```text
+INSURANCE_CLAIMS_LLM_MODE=api
+INSURANCE_CLAIMS_API_TOKEN=your-token
+INSURANCE_CLAIMS_API_URL=https://openrouter.ai/api/v1/chat/completions
+INSURANCE_CLAIMS_MODEL=openai/gpt-4o-mini
+```
+
+4. Redeploy the `main` branch.
+
+The API key must be added as a Vercel server environment variable and must not be placed in `public/` or committed to the repository.

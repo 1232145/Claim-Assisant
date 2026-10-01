@@ -68,8 +68,7 @@ function sessionResponse(state: SessionState, reply?: string, responseSource?: R
   };
 }
 
-export function createAppServer() {
-  return createServer(async (request, response) => {
+export async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
@@ -151,7 +150,10 @@ export function createAppServer() {
   } catch (error) {
     return json(response, 500, { error: error instanceof Error ? error.message : "Internal server error" });
   }
-  });
+}
+
+export function createAppServer() {
+  return createServer(handleRequest);
 }
 
 export function startServer(portNumber = port, host = "0.0.0.0") {
