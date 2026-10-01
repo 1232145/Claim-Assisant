@@ -1,8 +1,9 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "functions": {
     "api/index.ts": {
-      "includeFiles": ["insurance_claims/fixtures/**"]
+      "includeFiles": "insurance_claims/fixtures/**"
     }
   }
 }
