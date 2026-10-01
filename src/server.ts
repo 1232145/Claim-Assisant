@@ -71,6 +71,10 @@ function sessionResponse(state: SessionState, reply?: string, responseSource?: R
 export async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    const rewrittenPath = url.searchParams.get("_path");
+    const pathname = rewrittenPath
+      ? `/api${rewrittenPath.startsWith("/") ? rewrittenPath : `/${rewrittenPath}`}`
+      : url.pathname;
 
     if (request.method === "OPTIONS") {
       response.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type" });
@@ -78,14 +82,14 @@ export async function handleRequest(request: IncomingMessage, response: ServerRe
       return;
     }
 
-    if (request.method === "GET" && serveStatic(url.pathname, response)) return;
+    if (request.method === "GET" && serveStatic(pathname, response)) return;
 
-    if (request.method === "POST" && url.pathname === "/api/sessions") {
+    if (request.method === "POST" && pathname === "/api/sessions") {
       const state = sessions.create();
       return json(response, 201, { state, messages: [{ role: "assistant", content: initialMessage }] });
     }
 
-    const messageMatch = /^\/api\/sessions\/([^/]+)\/messages$/.exec(url.pathname);
+    const messageMatch = /^\/api\/sessions\/([^/]+)\/messages$/.exec(pathname);
     if (request.method === "POST" && messageMatch) {
       const sessionId = messageMatch[1];
       if (!sessionId) return json(response, 400, { error: "Session id is required" });
@@ -122,7 +126,7 @@ export async function handleRequest(request: IncomingMessage, response: ServerRe
       return json(response, 200, { ...sessionResponse(result.state, reply, responseSource), events: result.events });
     }
 
-    const consentMatch = /^\/api\/sessions\/([^/]+)\/consent$/.exec(url.pathname);
+    const consentMatch = /^\/api\/sessions\/([^/]+)\/consent$/.exec(pathname);
     if (request.method === "POST" && consentMatch) {
       const sessionId = consentMatch[1];
       if (!sessionId) return json(response, 400, { error: "Session id is required" });

@@ -5,7 +5,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/api/:path*", "destination": "/api?_path=/$1" },
     { "source": "/", "destination": "/index.html" }
   ],
   "functions": {
