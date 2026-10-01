@@ -88,21 +88,34 @@ describe("LLM adapter boundary", () => {
     const state = { ...createInitialState("phase-1"), phase: "RESOLVE_INTENT" as const, verified: true, partyId: "P9" };
     const proposal = await new LlmProposalAdapter({ client }).propose(state, "What are my current cases?");
     expect(proposal.proposedAction.kind).toBe("resolve_intent");
-    expect(proposal.proposedAction.intent).toBe("general_claim_question");
+    expect(proposal.proposedAction.intent).toBe("claim_overview");
   });
 
-  it("keeps an overview request broad when the provider narrows it incorrectly", async () => {
+  it("accepts the provider's explicit claim-overview intent", async () => {
     const client = {
       complete: async () => ({
-        signals: { identityCandidates: [], rememberedHints: {}, intent: "claim_status", requestsHuman: false, isOutOfScope: false },
-        proposedAction: { kind: "resolve_intent", intent: "claim_status", claimId: "CL-2048", responseText: "", consentStatus: "" },
+        signals: { identityCandidates: [], rememberedHints: {}, intent: "claim_overview", requestsHuman: false, isOutOfScope: false },
+        proposedAction: { kind: "resolve_intent", intent: "claim_overview", claimId: "", responseText: "", consentStatus: "" },
       }),
     };
     const state = { ...createInitialState("overview-1"), phase: "RESOLVE_INTENT" as const, verified: true, partyId: "P9" };
-    const proposal = await new LlmProposalAdapter({ client }).propose(state, "What are the claims I have?");
+    const proposal = await new LlmProposalAdapter({ client }).propose(state, "Tell me about my cases?");
 
-    expect(proposal.proposedAction.intent).toBe("general_claim_question");
-    expect(proposal.proposedAction.claimId).toBe("CL-2048");
+    expect(proposal.proposedAction.intent).toBe("claim_overview");
+    expect(proposal.proposedAction.claimId).toBeUndefined();
+  });
+
+  it("ignores unsupported provider claim-selection hints", async () => {
+    const client = {
+      complete: async () => ({
+        signals: { identityCandidates: [], rememberedHints: { claimType: "case" }, intent: "general_claim_question", requestsHuman: false, isOutOfScope: false },
+        proposedAction: { kind: "resolve_intent", intent: "general_claim_question", claimId: "", responseText: "", consentStatus: "" },
+      }),
+    };
+    const state = { ...createInitialState("hint-boundary-1"), phase: "RESOLVE_INTENT" as const, verified: true, partyId: "P9" };
+    const proposal = await new LlmProposalAdapter({ client }).propose(state, "What is my case about?");
+
+    expect(proposal.signals.rememberedHints.claimType).toBeUndefined();
   });
 
   it("does not let a provider turn a capability question into a claim answer", async () => {
@@ -148,7 +161,8 @@ describe("LLM adapter boundary", () => {
     expect(signals.properties.rememberedHints.additionalProperties).toBe(false);
     expect(action.required).toEqual(["kind", "intent", "claimId", "responseText", "consentStatus"]);
     expect(action.properties.kind.enum).toContain("resolve_intent");
-    expect(signals.properties.intent.enum).toContain("general_claim_question");
+    expect(signals.properties.intent.enum).toContain("claim_overview");
+    expect(action.properties.intent.enum).toContain("claim_overview");
   });
 
   it("includes a safe provider error detail for structured-output failures", async () => {

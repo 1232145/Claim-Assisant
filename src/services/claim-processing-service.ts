@@ -58,7 +58,7 @@ export class ClaimProcessingService {
   ) {}
 
   answer(request: ClaimAnswerRequest): ClaimAnswer {
-    if (request.intent === "general_claim_question" && /\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:what|which)\s+(?:do|can)\s+i\s+have\b|\b(?:list|show|explain)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b|\b(?:talk\s+about|explain|summari[sz]e)\s+(?:all\s+of\s+them|every(?:thing|\s+(?:claim|case))|each\s+(?:claim|case)|all\s+(?:of\s+)?(?:them|my\s+claims?|my\s+cases?))\b|\b(?:case|claim)\b.*\b(about|summarize|summary)\b/i.test(request.message ?? "")) {
+    if (request.intent === "claim_overview") {
       return this.claimOverview(request.partyId);
     }
     if (request.intent === "general_claim_question" && /^\s*(?:my|the)\s+case\s*[?!.]?\s*$/i.test(request.message ?? "")) {
@@ -68,9 +68,12 @@ export class ClaimProcessingService {
         unsupported: true,
       };
     }
+    const hints = request.hints ?? {};
+    const hasSelectionHint = Boolean(hints.claimType || hints.status || hints.dateReference);
     const claim = request.claimId
       ? this.claims.getClaimDetails(request.claimId)
-      : this.claims.findRelevantClaim(request.partyId, request.hints ?? {});
+      : this.claims.findRelevantClaim(request.partyId, hints)
+        ?? (request.intent === "general_claim_question" && !hasSelectionHint ? this.claims.getClaimsForParty(request.partyId)[0] ?? null : null);
 
     if (!claim || claim.party_id !== request.partyId) {
       return {

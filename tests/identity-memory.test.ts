@@ -104,6 +104,12 @@ describe("cross-phase memory", () => {
     });
   });
 
+  it("does not treat an identity birth date as a claim date", () => {
+    expect(extractRememberedHints("I’m Margaret Chen, born March 15th, 1985, policy POL-9921")).toEqual({
+      rawText: "I’m Margaret Chen, born March 15th, 1985, policy POL-9921",
+    });
+  });
+
   it("merges new hints while preserving earlier hints", () => {
     expect(mergeRememberedHints(
       { claimType: "healthcare", rawText: "original" },

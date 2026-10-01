@@ -1,5 +1,6 @@
 export * from "./claim-service.js";
 export * from "./claim-processing-service.js";
+export * from "./claim-language-service.js";
 export * from "./consent-service.js";
 export * from "./document-guidance-service.js";
 export * from "./fixture-loader.js";

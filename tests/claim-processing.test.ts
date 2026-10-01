@@ -33,7 +33,7 @@ describe("claim processing and post-processing", () => {
 
   it("returns every claim for multi-claim follow-ups", () => {
     for (const message of ["Talk about all of them?", "Explain every claim", "Can you summarize each case?"]) {
-      const result = service.answer({ partyId: "P9", intent: "general_claim_question", message });
+      const result = service.answer({ partyId: "P9", intent: "claim_overview", message });
       expect(result.ok).toBe(true);
       expect(result.claimId).toBeUndefined();
       expect(result.text).toContain("You have 4 claims");
@@ -52,12 +52,18 @@ describe("claim processing and post-processing", () => {
   });
 
   it("lists all claims when the caller asks for an overview", () => {
-    const result = service.answer({ partyId: "P9", intent: "general_claim_question", message: "What claims do I have?" });
+    const result = service.answer({ partyId: "P9", intent: "claim_overview", message: "What claims do I have?" });
     expect(result.ok).toBe(true);
     expect(result.text).toContain("You have 4 claims");
     expect(result.text).toContain("CL-2048");
     expect(result.text).toContain("CL-2102");
     expect(result.claimId).toBeUndefined();
+  });
+
+  it("uses the first verified claim for an unqualified singular question", () => {
+    const result = service.answer({ partyId: "P9", intent: "general_claim_question", message: "What is my case about?" });
+    expect(result.claimId).toBe("CL-2048");
+    expect(result.text).toContain("Healthcare claim denied");
   });
 
   it("does not answer a claim belonging to another party", () => {

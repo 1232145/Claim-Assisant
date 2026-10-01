@@ -118,6 +118,8 @@ describe("adversarial conversational HTTP flows", () => {
     ["How long will review take?", /less than a week/],
     ["What should I do next?", /next step/],
     ["What are my current cases?", /4 claims/],
+    ["Tell me about my cases?", /4 claims/],
+    ["Tell me about all my cases?", /4 claims/],
   ])("handles natural intent wording: %s", async (message, expected) => {
     const result = await send(await verifiedSession(), message);
 

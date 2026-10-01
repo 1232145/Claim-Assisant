@@ -23,6 +23,7 @@ export type ClaimIntent =
   | "submission_method"
   | "processing_time"
   | "appeal_next_steps"
+  | "claim_overview"
   | "general_claim_question"
   | "human_representative";
 

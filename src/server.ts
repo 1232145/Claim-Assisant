@@ -103,7 +103,7 @@ export async function handleRequest(request: IncomingMessage, response: ServerRe
       let reply = result.reply.content;
       let responseSource: ResponseSource | undefined;
       const claimDataWasAccessed = result.events.some((event) => event.type === "claim_data_accessed");
-      const overviewNeedsGrounding = result.state.phase === "RESOLVE_INTENT" && result.state.intent === "general_claim_question";
+      const overviewNeedsGrounding = result.state.phase === "RESOLVE_INTENT" && result.state.intent === "claim_overview";
       if ((claimDataWasAccessed || overviewNeedsGrounding) && result.state.partyId && result.state.intent) {
         const request = { partyId: result.state.partyId, intent: result.state.intent, hints: result.state.rememberedHints, message, ...(result.state.selectedClaimId ? { claimId: result.state.selectedClaimId } : {}) };
         const answer = claimProcessing.answer(request);
