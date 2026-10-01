@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fb" />
+    <title>ClaimCare Support</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="chat-card" aria-label="Insurance claims support chat">
+        <header class="app-header">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">✓</div>
+            <div>
+              <p class="eyebrow">CLAIMCARE SUPPORT</p>
+              <h1>Claims assistant</h1>
+            </div>
+          </div>
+          <div class="connection-state"><span class="status-dot"></span> Secure session</div>
+        </header>
+
+        <div class="session-banner">
+          <div>
+            <strong>How can we help today?</strong>
+            <span>Your claim information stays protected throughout this conversation.</span>
+          </div>
+          <button id="restart-button" class="button button-quiet" type="button">Restart</button>
+        </div>
+
+        <div id="message-list" class="message-list" role="log" aria-live="polite" aria-label="Conversation"></div>
+
+        <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
+        <div id="consent-panel" class="consent-panel" hidden>
+          <div>
+            <strong>Would you like an email summary?</strong>
+            <span>We will only send it with your explicit approval.</span>
+          </div>
+          <div class="consent-actions">
+            <button class="button button-primary" data-consent="approved" type="button">Yes, email me</button>
+            <button class="button button-secondary" data-consent="declined" type="button">No thanks</button>
+          </div>
+        </div>
+
+        <form id="composer" class="composer">
+          <label class="sr-only" for="message-input">Message</label>
+          <textarea id="message-input" rows="1" placeholder="Type your message…" autocomplete="off"></textarea>
+          <button id="send-button" class="send-button" type="submit" aria-label="Send message">
+            <span aria-hidden="true">↑</span>
+          </button>
+        </form>
+        <p class="disclaimer">For your protection, we verify your identity before discussing claim details.</p>
+      </section>
+
+      <aside class="debug-card" aria-label="Workflow session details">
+        <div class="debug-heading">
+          <div>
+            <p class="eyebrow">SESSION DETAILS</p>
+            <h2>Workflow status</h2>
+          </div>
+          <span class="mock-badge">DEMO</span>
+        </div>
+        <div class="phase-rail" id="phase-rail"></div>
+        <dl class="state-list">
+          <div><dt>Session</dt><dd id="session-id">—</dd></div>
+          <div><dt>Verified fields</dt><dd id="verified-fields">0</dd></div>
+          <div><dt>Intent</dt><dd id="intent">Not selected</dd></div>
+          <div><dt>Consent</dt><dd id="consent-status">Not requested</dd></div>
+        </dl>
+        <div id="escalation-note" class="escalation-note" hidden>
+          <strong>Human support requested</strong>
+          <span>A representative can continue this conversation.</span>
+        </div>
+        <p class="debug-note">This panel is visible for demo purposes and can be removed when connected to the production API.</p>
+      </aside>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
