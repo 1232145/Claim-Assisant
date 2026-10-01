@@ -72,6 +72,16 @@ function extractBestName(message: string): string | undefined {
   return matches.sort((left, right) => right.score - left.score)[0]?.value;
 }
 
+/** Extracts a bare two- or three-word name from a clearly delimited identity tuple. */
+function extractUnlabeledName(message: string): string | undefined {
+  const hasOtherIdentityValue = /\b[A-Z]{2,5}[-\s]?\d{3,}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b/i.test(message);
+  if (!hasOtherIdentityValue) return undefined;
+  return message
+    .split(/[\n,;]+/)
+    .map((part) => part.trim())
+    .find((part) => /^[A-Za-z]+(?:\s+[A-Za-z][A-Za-z'-]*){1,2}$/.test(part));
+}
+
 /**
  * Extracts explicitly labeled identity answers from natural language. It may
  * return partial candidates; the verification service decides whether they
@@ -80,11 +90,11 @@ function extractBestName(message: string): string | undefined {
 export function extractIdentityCandidates(message: string): IdentityCandidate[] {
   const candidates: IdentityCandidate[] = [];
   addCandidate(candidates, "email_address", message.match(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i)?.[0]);
-  addCandidate(candidates, "policy_number", message.match(/\b(?:policy(?:\s+number)?|policy\s*#)\s*(?:is|:)?\s*([A-Z]{2,5}[-\s]?\d{3,})\b/i)?.[1]);
-  addCandidate(candidates, "date_of_birth", message.match(/\b(?:date\s+of\s+birth|dob|born|birthday)\s*(?:is|:|on)?\s*((?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})\b/i)?.[1]);
+  addCandidate(candidates, "policy_number", message.match(/\b(?:policy(?:\s+number)?|policy\s*#)\s*(?:is|:)?\s*([A-Z]{2,5}[-\s]?\d{3,})\b/i)?.[1] ?? message.match(/\b[A-Z]{2,5}[-\s]?\d{3,}\b/)?.[0]);
+  addCandidate(candidates, "date_of_birth", message.match(/\b(?:date\s+of\s+birth|dob|born|birthday)\s*(?:is|:|on)?\s*((?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})\b/i)?.[1] ?? message.match(/\b(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/)?.[0]);
   addCandidate(candidates, "phone_number", message.match(/\b(?:phone|phone\s+number|telephone|mobile)\s*(?:is|:)?\s*((?:\+?\d|\(\d)[\d\s().-]{7,}\d)/i)?.[1]);
   addCandidate(candidates, "id_last4", message.match(/\b(?:ssn|social\s+security|national\s*id|id)\s*(?:last\s*four|last\s*4|#)?\s*(?:is|:)?\s*(\d{4})\b/i)?.[1]);
-  addCandidate(candidates, "full_name", extractBestName(message));
+  addCandidate(candidates, "full_name", extractBestName(message) ?? extractUnlabeledName(message));
   return candidates;
 }
 

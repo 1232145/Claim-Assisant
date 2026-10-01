@@ -73,6 +73,11 @@ describe("identity verification", () => {
       { field: "full_name", value: "Margaret Chen" },
     ]);
     expect(extractIdentityCandidates("’m Margaret Chen This is Margaret You can call me Margaret Chen I was born March 15th, 1985 My birthday is 03/15/85 The policy is POL-9921")).toContainEqual({ field: "full_name", value: "Margaret Chen" });
+    expect(extractIdentityCandidates("Margaret Chen, POL-9921, 1985-03-15")).toEqual([
+      { field: "policy_number", value: "POL-9921" },
+      { field: "date_of_birth", value: "1985-03-15" },
+      { field: "full_name", value: "Margaret Chen" },
+    ]);
   });
 
   it("accepts a conservative spelling typo when the other identity fields match", () => {

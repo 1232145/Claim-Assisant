@@ -40,6 +40,31 @@ describe("LLM adapter boundary", () => {
     expect(proposal.signals.identityCandidates.map((candidate) => candidate.field)).toEqual(["policy_number", "date_of_birth", "full_name"]);
   });
 
+  it("accepts provider extraction from an unlabeled identity list", async () => {
+    const client = {
+      complete: async () => ({
+        signals: {
+          identityCandidates: [
+            { field: "full_name", value: "Margaret Chen" },
+            { field: "policy_number", value: "POL-9921" },
+            { field: "date_of_birth", value: "1985-03-15" },
+          ],
+          rememberedHints: {},
+          requestsHuman: false,
+          isOutOfScope: false,
+        },
+        proposedAction: { kind: "verify_identity", intent: "", claimId: "", responseText: "", consentStatus: "" },
+      }),
+    };
+    const proposal = await new LlmProposalAdapter({ client }).propose(createInitialState("unlabeled-ai-1"), "Margaret Chen, POL-9921, 1985-03-15");
+
+    expect(proposal.signals.identityCandidates).toEqual([
+      { field: "policy_number", value: "POL-9921" },
+      { field: "date_of_birth", value: "1985-03-15" },
+      { field: "full_name", value: "Margaret Chen" },
+    ]);
+  });
+
   it("falls back safely when a provider returns an unknown action", async () => {
     const client = { complete: async () => ({ signals: { identityCandidates: [], rememberedHints: {}, requestsHuman: false, isOutOfScope: false }, proposedAction: { kind: "change_phase" } }) };
     const proposal = await new LlmProposalAdapter({ client }).propose(createInitialState("bad-1"), "hello");
