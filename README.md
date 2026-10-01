@@ -2,6 +2,8 @@
 
 A small insurance-claims support demo with a deterministic workflow, fixture-backed claim answers, and an optional LLM interpretation layer.
 
+Live demo: [https://claim-assisant.vercel.app/](https://claim-assisant.vercel.app/)
+
 ## Run locally
 
 Requirements: Node.js 20+.
