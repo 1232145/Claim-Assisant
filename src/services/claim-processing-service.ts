@@ -20,6 +20,7 @@ export interface ClaimAnswerRequest {
 export interface ClaimAnswer {
   ok: boolean;
   claimId?: string;
+  claimCount?: number;
   text: string;
   facts?: ClaimFact[];
   guidance?: Guidance;
@@ -57,7 +58,7 @@ export class ClaimProcessingService {
   ) {}
 
   answer(request: ClaimAnswerRequest): ClaimAnswer {
-    if (request.intent === "general_claim_question" && /\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:list|show)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b/i.test(request.message ?? "")) {
+    if (request.intent === "general_claim_question" && /\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:what|which)\s+(?:do|can)\s+i\s+have\b|\b(?:list|show|explain)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b|\b(?:talk\s+about|explain|summari[sz]e)\s+(?:all\s+of\s+them|every(?:thing|\s+(?:claim|case))|each\s+(?:claim|case)|all\s+(?:of\s+)?(?:them|my\s+claims?|my\s+cases?))\b|\b(?:case|claim)\b.*\b(about|summarize|summary)\b/i.test(request.message ?? "")) {
       return this.claimOverview(request.partyId);
     }
     if (request.intent === "general_claim_question" && /^\s*(?:my|the)\s+case\s*[?!.]?\s*$/i.test(request.message ?? "")) {
@@ -108,7 +109,7 @@ export class ClaimProcessingService {
     const claims = this.claims.getClaimsForParty(partyId);
     if (claims.length === 0) return { ok: true, text: "I could not find any claims in the available records." };
     const summary = claims.map((claim) => `${claim.case_id} (${claim.case_type}, ${claim.status}, ${claim.created_at})`).join("; ");
-    return { ok: true, text: `You have ${claims.length} claims in the available records: ${summary}. Which claim would you like to review?`, facts: [{ key: "claim_count", value: String(claims.length) }, ...claims.flatMap((claim) => this.claimFacts(claim))] };
+    return { ok: true, claimCount: claims.length, text: `You have ${claims.length} claims in the available records: ${summary}. Which claim would you like to review?`, facts: [{ key: "claim_count", value: String(claims.length) }, ...claims.flatMap((claim) => this.claimFacts(claim))] };
   }
 
   private claimFacts(claim: ClaimRecord): ClaimFact[] {

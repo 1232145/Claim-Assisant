@@ -19,6 +19,8 @@ describe("fixture data services", () => {
   it("returns only claims belonging to a party and finds the hinted claim", () => {
     const service = new FixtureClaimService();
     expect(service.getClaimsForParty("P9")).toHaveLength(4);
+    expect(service.getClaimsForParty("P14")).toHaveLength(4);
+    expect(service.findRelevantClaim("P14", { claimType: "auto" })?.case_id).toBe("CL-4104");
     expect(service.getClaimDetails("missing")).toBeNull();
     expect(service.findRelevantClaim("P9", {
       claimType: "healthcare",
@@ -32,6 +34,7 @@ describe("fixture data services", () => {
     expect(service.getDocumentGuidance("CL-2048", "pathology report")?.text).toContain("specimen details");
     expect(service.getDocumentGuidance("CL-2048")?.text).toContain("medical claims");
     expect(service.getDocumentAlternativeGuidance("office note")?.text).toContain("visit summary");
+    expect(service.getDocumentAlternativeGuidance("provider note")?.text).toContain("visit summary");
     expect(service.getDocumentGuidance("missing")).toBeNull();
   });
 

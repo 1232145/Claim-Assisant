@@ -7,7 +7,7 @@ import type {
   ProposedAction,
   SessionState,
 } from "../shared/index.js";
-import { extractIdentityCandidates, extractRememberedHints, isCapabilityQuestion, signalsWithCapturedMemory } from "../services/index.js";
+import { extractIdentityCandidates, extractRememberedHints, isCapabilityQuestion, requestsHumanRepresentative, signalsWithCapturedMemory } from "../services/index.js";
 import { LLM_RESPONSE_SCHEMA, LLM_SYSTEM_PROMPT, buildUserPrompt } from "./prompt.js";
 import type { LlmAdapterOptions, LlmCompletionClient, LlmMessage, ProposalResolver } from "./types.js";
 
@@ -71,9 +71,12 @@ export class LlmProposalAdapter implements ProposalResolver {
 
 /** Prevents an overly cautious model action from discarding explicit identity fields. */
 async function normalizePhaseProposal(state: SessionState, message: string, proposal: LlmTurnProposal): Promise<LlmTurnProposal> {
-  const identitySafe = state.phase === "VERIFY_ID" && proposal.signals.identityCandidates.length > 0 && proposal.proposedAction.kind === "ask_for_identity"
-    ? { ...proposal, proposedAction: { ...proposal.proposedAction, kind: "verify_identity" as const } }
+  const escalationSafe = proposal.proposedAction.kind === "escalate_to_human" && !requestsHumanRepresentative(message)
+    ? await fallbackProposal(state, message)
     : proposal;
+  const identitySafe = state.phase === "VERIFY_ID" && escalationSafe.signals.identityCandidates.length > 0 && escalationSafe.proposedAction.kind === "ask_for_identity"
+    ? { ...escalationSafe, proposedAction: { ...escalationSafe.proposedAction, kind: "verify_identity" as const } }
+    : escalationSafe;
   const overviewSafe = state.phase === "RESOLVE_INTENT"
     && isClaimOverviewMessage(message)
     && identitySafe.proposedAction.kind === "resolve_intent"
@@ -83,15 +86,52 @@ async function normalizePhaseProposal(state: SessionState, message: string, prop
   const capabilitySafe = state.phase === "RESOLVE_INTENT" && isCapabilityQuestion(message)
     ? { ...overviewSafe, proposedAction: { kind: "resolve_intent" as const, responseText: capabilityResponse } }
     : overviewSafe;
+  const intentSafe = applyHighConfidenceIntent(capabilitySafe, message);
+  const postProcessSafe = state.phase === "POST_PROCESS"
+    && !isConsentMessage(message)
+    && intentSafe.proposedAction.kind !== "resolve_intent"
+    && intentSafe.proposedAction.kind !== "escalate_to_human"
+    ? await fallbackProposal(state, message)
+    : intentSafe;
   const needsIntentFallback = state.phase === "RESOLVE_INTENT"
-    && capabilitySafe.proposedAction.kind !== "resolve_intent"
-    && capabilitySafe.proposedAction.kind !== "escalate_to_human";
-  return needsIntentFallback ? fallbackProposal(state, message) : capabilitySafe;
+    && postProcessSafe.proposedAction.kind !== "resolve_intent"
+    && postProcessSafe.proposedAction.kind !== "escalate_to_human";
+  return needsIntentFallback ? fallbackProposal(state, message) : postProcessSafe;
+}
+
+/**
+ * Keeps strong user cues from being weakened by a provider's intent guess.
+ * The model still interprets wording and writes the response; this guard only
+ * protects high-confidence operations that must select the right approved
+ * service, such as an explicit document alternative request.
+ */
+function applyHighConfidenceIntent(proposal: LlmTurnProposal, message: string): LlmTurnProposal {
+  if (proposal.proposedAction.kind !== "resolve_intent") return proposal;
+  const intent = highConfidenceIntent(message);
+  return intent ? { ...proposal, proposedAction: { ...proposal.proposedAction, intent } } : proposal;
+}
+
+function highConfidenceIntent(message: string): ClaimIntent | undefined {
+  if (isClaimOverviewMessage(message)) return "general_claim_question";
+  if (/\b(?:cannot|can't|can not|unable|don't have|do not have|lost|alternative|substitute|replacement)\b.*\b(?:document|report|note|paperwork|file)\b/i.test(message)) return "document_alternatives";
+  if (/\b(?:submit|send|upload|provide|turn in)\b.*\b(?:document|report|note|paperwork|file)\b|\bwhere\s+(?:do|can)\s+i\s+(?:send|submit|upload)\b/i.test(message)) return "submission_method";
+  if (/\b(?:how long|processing time|when will|how soon)\b/i.test(message)) return "processing_time";
+  if (/\b(?:next step|what should i do|appeal|appeal process)\b/i.test(message)) return "appeal_next_steps";
+  if (/\b(?:denied|denial|why was.*denied)\b/i.test(message)) return "denial_reason";
+  if (/\b(?:status|where.*claim)\b/i.test(message)) return "claim_status";
+  if (/\b(?:document|paperwork)\b/i.test(message)) return "required_documents";
+  return undefined;
 }
 
 /** Recognizes broad claims-list requests that must not be narrowed to one claim. */
 function isClaimOverviewMessage(message: string): boolean {
-  return /\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:list|show)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b/i.test(message);
+  return /\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:what|which)\s+(?:do|can)\s+i\s+have\b|\b(?:list|show|explain)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b|\b(?:talk\s+about|explain|summari[sz]e)\s+(?:all\s+of\s+them|every(?:thing|\s+(?:claim|case))|each\s+(?:claim|case)|all\s+(?:of\s+)?(?:them|my\s+claims?|my\s+cases?))\b/i.test(message);
+}
+
+/** Distinguishes explicit email-summary responses from new claim questions. */
+function isConsentMessage(message: string): boolean {
+  return /^(?:yes|yeah|yep|accept|approve|send|no|nope|decline|declined|do not|don't|not now|later)\b/i.test(message.trim())
+    && !/\b(?:claim|case|status|denied|document|dental|healthcare|auto|appeal)\b/i.test(message);
 }
 
 /** Uses the safe local proposal only when a provider proposal cannot drive the current phase. */
@@ -118,6 +158,7 @@ export class MockLlmClient implements LlmCompletionClient {
     else if (phase === "VERIFY_ID") proposedAction = candidates.length > 0 ? { kind: "verify_identity" } : { kind: "ask_for_identity", responseText: isCapabilityQuestion(message) ? "I can help with claim status, claim summaries, denial explanations, required documents, submission methods, processing times, next steps, and human support. I’ll need to verify your identity before discussing your specific claim." : "Please provide at least three identity details so I can verify you." };
     else if (phase === "RESOLVE_INTENT") proposedAction = isCapabilityQuestion(message) ? { kind: "resolve_intent", responseText: capabilityResponse } : isAmbiguous ? { kind: "resolve_intent", responseText: "Could you clarify whether you want the claim status, a summary, the denial reason, required documents, submission instructions, processing time, or next steps?" } : { kind: "resolve_intent", intent };
     else if (phase === "PROCESS_CASE") proposedAction = { kind: "answer_claim_question" };
+    else if (phase === "POST_PROCESS" && !isConsentMessage(message)) proposedAction = { kind: "resolve_intent", intent };
     else proposedAction = { kind: "record_email_consent", consentStatus: /\b(yes|accept|approve|send)\b/i.test(message) ? "approved" : /\b(no|decline|do not)\b/i.test(message) ? "declined" : "pending" };
     const signals: ExtractedMessageSignals = { identityCandidates: candidates, rememberedHints, ...(phase === "RESOLVE_INTENT" ? { intent: intent as ClaimIntent } : {}), requestsHuman, isOutOfScope };
     return { signals, proposedAction };
@@ -131,7 +172,7 @@ function classifyIntent(message: string): ClaimIntent {
   if (/\b(?:submit|send|upload|provide|turn in)\b.*\b(?:documents?|reports?|notes?|paperwork|files?)\b|\bwhere\s+(?:do|can)\s+i\s+(?:send|submit|upload)\b/i.test(message)) return "submission_method";
   if (/\b(?:how long|processing time|when will|how soon)\b/i.test(message)) return "processing_time";
   if (/\b(?:next step|what should i do|appeal|appeal process)\b/i.test(message)) return "appeal_next_steps";
-  if (/\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:list|show)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b|\b(case|claim)\b.*\b(about|summarize|summary)\b/i.test(message)) return "general_claim_question";
+  if (/\b(?:what|which)\s+(?:(?:are|is)\s+)?(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)(?:\s+(?:do\s+i\s+have|i\s+have))?\b(?!\s+about)|\b(?:list|show)\s+(?:all\s+)?(?:the\s+)?(?:my\s+)?(?:current\s+)?(?:claims?|cases?)\b|\b(?:talk\s+about|explain|summari[sz]e)\s+(?:all\s+of\s+them|every(?:thing|\s+(?:claim|case))|each\s+(?:claim|case)|all\s+(?:of\s+)?(?:them|my\s+claims?|my\s+cases?))\b|\b(case|claim)\b.*\b(about|summarize|summary)\b/i.test(message)) return "general_claim_question";
   if (/\b(status|where.*claim)\b/i.test(message)) return "claim_status";
   if (/\bdocuments?\b|\bpaperwork\b/i.test(message)) return "required_documents";
   return "general_claim_question";

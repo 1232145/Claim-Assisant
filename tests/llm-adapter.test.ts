@@ -120,6 +120,18 @@ describe("LLM adapter boundary", () => {
     expect(proposal.proposedAction.responseText).toContain("claim status");
   });
 
+  it("does not let a provider escalate an identity refusal before the workflow threshold", async () => {
+    const client = {
+      complete: async () => ({
+        signals: { identityCandidates: [], rememberedHints: {}, requestsHuman: false, isOutOfScope: false },
+        proposedAction: { kind: "escalate_to_human", intent: "", claimId: "", responseText: "", consentStatus: "" },
+      }),
+    };
+    const proposal = await new LlmProposalAdapter({ client }).propose(createInitialState("refusal-provider-1"), "I still refuse to provide identity details.");
+
+    expect(proposal.proposedAction.kind).toBe("ask_for_identity");
+  });
+
   it("executes only explicitly allowlisted tools", async () => {
     const tools = new AllowlistedToolCallAdapter(new Map([["lookup", (args) => args.value]]));
     await expect(tools.execute({ name: "lookup", arguments: { value: "ok" } })).resolves.toBe("ok");

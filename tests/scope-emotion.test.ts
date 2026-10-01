@@ -15,6 +15,8 @@ describe("deterministic scope and emotion analysis", () => {
     expect(isOutOfScopeMessage("Why was my claim denied?")) .toBe(false);
     expect(isOutOfScopeMessage("What was the case about?")) .toBe(false);
     expect(isOutOfScopeMessage("What is my cases?")) .toBe(false);
+    expect(isOutOfScopeMessage("Can you tell me what I have?")) .toBe(false);
+    expect(isOutOfScopeMessage("Talk about all of them?")) .toBe(false);
     expect(isOutOfScopeMessage("What can you do?")) .toBe(false);
     expect(isOutOfScopeMessage("What documents do I need?")) .toBe(false);
     expect(analyzer.analyze(createInitialState("scope-1"), "What documents do I need for my claim?")).toMatchObject({

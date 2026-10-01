@@ -12,7 +12,7 @@ interface GuidanceFixture {
 function documentKey(documentName: string): string {
   const name = normalizeText(documentName);
   if (name.includes("pathology")) return "original pathology report";
-  if (name.includes("office note")) return "treating provider office note";
+  if (name.includes("office note") || name.includes("provider note")) return "treating provider office note";
   return name;
 }
 

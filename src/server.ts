@@ -104,10 +104,11 @@ export async function handleRequest(request: IncomingMessage, response: ServerRe
       let responseSource: ResponseSource | undefined;
       const claimDataWasAccessed = result.events.some((event) => event.type === "claim_data_accessed");
       const overviewNeedsGrounding = result.state.phase === "RESOLVE_INTENT" && result.state.intent === "general_claim_question";
-      if ((claimDataWasAccessed || overviewNeedsGrounding) && result.state.partyId && result.state.intent && !answers.has(sessionId)) {
+      if ((claimDataWasAccessed || overviewNeedsGrounding) && result.state.partyId && result.state.intent) {
         const request = { partyId: result.state.partyId, intent: result.state.intent, hints: result.state.rememberedHints, message, ...(result.state.selectedClaimId ? { claimId: result.state.selectedClaimId } : {}) };
         const answer = claimProcessing.answer(request);
         if (answer.claimId) answers.set(sessionId, { claimId: answer.claimId, intent: result.state.intent, text: answer.text });
+        else answers.delete(sessionId);
         try {
             const phrased = await groundedResponses.generate({
             answer,

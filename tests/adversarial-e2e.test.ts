@@ -42,6 +42,10 @@ async function verifiedSession(turns = ["My name is Margaret Chen, DOB 03/15/85,
   return sessionId;
 }
 
+async function verifiedJordanSession(): Promise<string> {
+  return verifiedSession(["My name is Jordan Rivera, DOB 07/24/1992, policy POL-5520."]);
+}
+
 describe("adversarial conversational HTTP flows", () => {
   it("handles clipped contractions, repeated fragments, and multiline identity input", async () => {
     const sessionId = await createSession();
@@ -129,6 +133,60 @@ describe("adversarial conversational HTTP flows", () => {
     expect(result.reply?.content).toContain("pathology report");
   });
 
+  it("selects the auto claim from a natural follow-up phrase", async () => {
+    const result = await send(await verifiedSession(), "Info about auto claim?");
+
+    expect(result.state.escalationRequired).toBe(false);
+    expect(result.reply?.content).toMatch(/auto claim|in progress|open/i);
+    expect(result.reply?.content).not.toContain("could not identify a matching claim");
+  });
+
+  it("continues a long multi-claim conversation after each post-process answer", async () => {
+    const sessionId = await verifiedSession();
+    const auto = await send(sessionId, "Info about auto claim?");
+    const dental = await send(sessionId, "What about dental claim?");
+    const settledHealthcare = await send(sessionId, "What about my settled healthcare claim?");
+    const deniedHealthcare = await send(sessionId, "Why was the denied healthcare claim denied?");
+
+    expect(auto.reply?.content).toMatch(/auto claim|in progress|open/i);
+    expect(dental.reply?.content).toMatch(/dental|completed|closed/i);
+    expect(settledHealthcare.reply?.content).toMatch(/CL-2011|settled|closed/i);
+    expect(deniedHealthcare.reply?.content).toMatch(/CL-2048|pathology report|office note/i);
+    for (const result of [auto, dental, settledHealthcare, deniedHealthcare]) {
+      expect(result.state.escalationRequired).toBe(false);
+      expect(result.state.phase).toBe("POST_PROCESS");
+    }
+  });
+
+  it("keeps a second policyholder's claim answers isolated across the full flow", async () => {
+    const sessionId = await verifiedJordanSession();
+    const overview = await send(sessionId, "What are my claims?");
+    const auto = await send(sessionId, "Info about auto claim?");
+    const dental = await send(sessionId, "What about dental claim?");
+    const settledHealthcare = await send(sessionId, "What about my settled healthcare claim?");
+    const deniedHealthcare = await send(sessionId, "Why was the denied healthcare claim denied?");
+    const documents = await send(sessionId, "What documents do I need?");
+    const alternative = await send(sessionId, "I cannot get the provider note.");
+    const submission = await send(sessionId, "Where do I upload the documents?");
+    const processing = await send(sessionId, "How long will review take?");
+    const nextSteps = await send(sessionId, "What should I do next?");
+
+    expect(overview.reply?.content).toContain("4 claims");
+    expect(auto.reply?.content).toMatch(/CL-4104|auto claim|in progress|open/i);
+    expect(dental.reply?.content).toMatch(/CL-4103|dental|completed|closed/i);
+    expect(settledHealthcare.reply?.content).toMatch(/CL-4102|settled|closed/i);
+    expect(deniedHealthcare.reply?.content).toMatch(/CL-4101|treatment summary|provider note/i);
+    expect(documents.reply?.content).toMatch(/treatment summary|provider note/i);
+    expect(alternative.reply?.content).toMatch(/visit summary|provider note|alternative/i);
+    expect(submission.reply?.content).toMatch(/member portal|upload/i);
+    expect(processing.reply?.content).toMatch(/less than a week|review/i);
+    expect(nextSteps.reply?.content).toMatch(/next step|appeal|2026-05-20/i);
+    for (const result of [auto, dental, settledHealthcare, deniedHealthcare, documents, alternative, submission, processing, nextSteps]) {
+      expect(result.state.escalationRequired).toBe(false);
+    }
+    expect(deniedHealthcare.reply?.content).not.toMatch(/pathology report|office note/);
+  });
+
   it("refuses a claim belonging to another policyholder", async () => {
     const result = await send(await verifiedSession(), "What is the status of claim CL-3001?");
 
@@ -154,6 +212,14 @@ describe("adversarial conversational HTTP flows", () => {
     const result = await send(await createSession(), message);
 
     expect(result.state.emotionalState).toBe(emotion);
+    expect(result.reply?.content).not.toMatch(/CL-\d+|pathology|office note/i);
+  });
+
+  it("keeps empathy when an anxious caller still needs verification", async () => {
+    const result = await send(await createSession(), "I am worried about my claim.");
+
+    expect(result.state.emotionalState).toBe("anxious");
+    expect(result.reply?.content).toMatch(/stressful|clearly|worry/i);
     expect(result.reply?.content).not.toMatch(/CL-\d+|pathology|office note/i);
   });
 

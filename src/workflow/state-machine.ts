@@ -38,7 +38,7 @@ export interface WorkflowProposalResolver {
 }
 
 export interface ImmediateClaimProcessor {
-  answer(request: { partyId: string; intent: ClaimIntent; hints: SessionState["rememberedHints"]; message: string; claimId?: string }): { ok: boolean; claimId?: string; text: string; requiresHuman?: boolean };
+  answer(request: { partyId: string; intent: ClaimIntent; hints: SessionState["rememberedHints"]; message: string; claimId?: string }): { ok: boolean; claimId?: string; claimCount?: number; text: string; requiresHuman?: boolean };
 }
 
 export interface WorkflowEngineDependencies {
@@ -136,17 +136,23 @@ export class SopWorkflowEngine implements WorkflowEngine {
       signals: { ...proposal.signals, identityCandidates: candidates },
     };
     const analysis = this.scopeEmotionAnalyzer.analyze(next, message);
+    // Broad or ambiguous questions remain eligible for LLM intent resolution.
+    // The local scope guard owns rejection of explicitly unrelated topics.
+    const isOutOfScope = analysis.isOutOfScope;
     next.emotionalState = analysis.emotionalState;
-    events.push(this.event("scope_classified", next, { isOutOfScope: analysis.isOutOfScope }));
+    events.push(this.event("scope_classified", next, { isOutOfScope }));
     events.push(this.event("emotion_detected", next, { emotionalState: analysis.emotionalState }));
     mergeHints(next, effectiveProposal.signals);
 
-    if (analysis.requestsHuman || effectiveProposal.proposedAction.kind === "escalate_to_human") {
+    // A model suggestion cannot bypass local transfer rules. Explicit human
+    // requests are detected by the scope analyzer; refusal and other guarded
+    // paths must still follow their configured attempt thresholds.
+    if (analysis.requestsHuman) {
       this.escalate(next, "caller_requested_human", events);
       return this.finish(next, "I can connect you with a human representative.", events);
     }
 
-    if (analysis.isOutOfScope) {
+    if (isOutOfScope) {
       next.irrelevantAttempts += 1;
       if (next.irrelevantAttempts >= this.maxOutOfScopeAttempts) {
         this.escalate(next, "repeated_out_of_scope", events);
@@ -178,24 +184,24 @@ export class SopWorkflowEngine implements WorkflowEngine {
       case "PROCESS_CASE":
         return this.handleCase(next, effectiveProposal.proposedAction, message, events);
       case "POST_PROCESS":
-        return this.handlePostProcess(next, effectiveProposal.proposedAction, events);
+        return this.handlePostProcess(next, effectiveProposal.proposedAction, message, events);
     }
   }
 
   /** Handles identity collection and advances only after three or more fields match. */
   private handleVerification(state: SessionState, proposal: LlmTurnProposal, events: AuditEvent[]): SendMessageResponse {
     const action = proposal.proposedAction.kind;
+    const empathy = state.emotionalState && state.emotionalState !== "neutral" ? `${empathyGuidance(state.emotionalState)} ` : "";
     if (action !== "verify_identity" && action !== "ask_for_identity") {
       if (isProtectedAction(action)) {
         events.push(this.event("protected_data_blocked", state, { action }));
-        return this.finish(state, "Please complete identity verification first. I can then help with your claim.", events);
+        return this.finish(state, `${empathy}Please complete identity verification first. I can then help with your claim.`, events);
       }
-      return this.finish(state, "Before I access claim information, please provide at least three identity details, such as your name, date of birth, policy number, phone, email, or ID last four.", events);
+      return this.finish(state, `${empathy}Before I access claim information, please provide at least three identity details, such as your name, date of birth, policy number, phone, email, or ID last four.`, events);
     }
 
     if (action === "ask_for_identity") {
       const request = proposal.proposedAction.responseText ?? "Please provide at least three identity details so I can verify you.";
-      const empathy = state.emotionalState && state.emotionalState !== "neutral" ? `${empathyGuidance(state.emotionalState)} ` : "";
       return this.finish(state, `${empathy}${request}`, events);
     }
 
@@ -223,7 +229,6 @@ export class SopWorkflowEngine implements WorkflowEngine {
     const more = remaining === 1 ? "1 more matching detail" : `${remaining} more matching details`;
     const missingFields = (Object.keys(identityFieldLabels) as IdentityField[]).filter((field) => !result.matchedFields.includes(field));
     const examples = missingFields.slice(0, remaining).map((field) => identityFieldLabels[field]).join(", ");
-    const empathy = state.emotionalState && state.emotionalState !== "neutral" ? `${empathyGuidance(state.emotionalState)} ` : "";
     return this.finish(state, `${empathy}${matching}. Please provide ${more}${examples ? `, such as ${examples}` : ""}.`, events);
   }
 
@@ -238,9 +243,9 @@ export class SopWorkflowEngine implements WorkflowEngine {
     if (this.dependencies.claimProcessor && state.partyId) {
       const answer = this.dependencies.claimProcessor.answer({ partyId: state.partyId, intent: action.intent, hints: state.rememberedHints, message, ...(state.selectedClaimId ? { claimId: state.selectedClaimId } : {}) });
       if (answer.claimId) state.selectedClaimId = answer.claimId;
-      if (answer.ok && answer.claimId) {
+      if (answer.ok && (answer.claimId || answer.claimCount !== undefined)) {
         this.changePhase(state, "PROCESS_CASE", events);
-        events.push(this.event("claim_data_accessed", state, { claimId: answer.claimId, intent: action.intent }));
+        events.push(this.event("claim_data_accessed", state, { ...(answer.claimId ? { claimId: answer.claimId } : {}), ...(answer.claimCount !== undefined ? { claimCount: answer.claimCount } : {}), intent: action.intent }));
         this.changePhase(state, "POST_PROCESS", events);
         return this.finish(state, `${answer.text} Would you like an email summary?`, events);
       }
@@ -274,7 +279,24 @@ export class SopWorkflowEngine implements WorkflowEngine {
   }
 
   /** Records explicit email-summary consent without claiming that an unapproved email was sent. */
-  private handlePostProcess(state: SessionState, action: ProposedAction, events: AuditEvent[]): SendMessageResponse {
+  private handlePostProcess(state: SessionState, action: ProposedAction, message: string, events: AuditEvent[]): SendMessageResponse {
+    if (action.kind === "resolve_intent" && action.intent && this.dependencies.claimProcessor && state.partyId) {
+      state.intent = action.intent;
+      const explicitClaimId = extractExplicitClaimId(message);
+      if (explicitClaimId) state.selectedClaimId = explicitClaimId;
+      else delete state.selectedClaimId;
+      const answer = this.dependencies.claimProcessor.answer({ partyId: state.partyId, intent: action.intent, hints: state.rememberedHints, message, ...(explicitClaimId ? { claimId: explicitClaimId } : {}) });
+      if (answer.claimId) state.selectedClaimId = answer.claimId;
+      if (answer.ok) {
+        events.push(this.event("claim_data_accessed", state, {
+          ...(answer.claimId ? { claimId: answer.claimId } : {}),
+          intent: action.intent,
+        }));
+        return this.finish(state, `${answer.text}${answer.claimId ? " Would you like an email summary?" : ""}`, events);
+      }
+      if (answer.requiresHuman) this.escalate(state, "unsupported_claim_question", events);
+      return this.finish(state, answer.text, events);
+    }
     if (action.kind === "record_email_consent" && action.consentStatus) {
       state.emailConsent = action.consentStatus;
       events.push(this.event("email_consent_recorded", state, { status: action.consentStatus }));

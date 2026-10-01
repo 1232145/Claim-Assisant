@@ -125,4 +125,9 @@ describe("cross-phase memory", () => {
     expect(result.rememberedHints.status).toBe("denied");
     expect(result.rememberedHints.dateReference).toBe("2024");
   });
+
+  it("normalizes settled and in-progress status hints", () => {
+    expect(extractRememberedHints("What about my settled healthcare claim?").status).toBe("closed");
+    expect(extractRememberedHints("Tell me about the in progress auto claim.").status).toBe("open");
+  });
 });

@@ -136,4 +136,19 @@ describe("SOP state machine", () => {
     expect(result.state.escalationReason).toBe("repeated_out_of_scope");
     expect(result.events.some((event) => event.type === "escalation_required")).toBe(true);
   });
+
+  it("keeps provider escalation from bypassing the identity-refusal threshold", async () => {
+    const workflow = engine(makeProposal("escalate_to_human"));
+    let state: SessionState = createInitialState("s-refusal-provider");
+    const first = await workflow.handleMessage(state, "I refuse to provide identity details.");
+    state = first.state;
+    const second = await workflow.handleMessage(state, "I still refuse to provide identity details.");
+    state = second.state;
+    const third = await workflow.handleMessage(state, "I will not provide any information.");
+
+    expect(first.state.escalationRequired).toBe(false);
+    expect(second.state.escalationRequired).toBe(false);
+    expect(third.state.escalationRequired).toBe(true);
+    expect(third.state.escalationReason).toBe("identity_refusal");
+  });
 });

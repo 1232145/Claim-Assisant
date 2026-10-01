@@ -17,13 +17,13 @@ function firstMatch(message: string, pattern: RegExp): string | undefined {
 export function extractRememberedHints(message: string): RememberedHints {
   const normalized = normalizeText(message);
   const claimType = firstMatch(normalized, /\b(healthcare|medical|dental|auto|automobile)\s+claim\b/);
-  const status = firstMatch(normalized, /\b(denied|closed|open|approved|pending|paid)\b(?=\s+(?:\w+\s+){0,2}claim\b)/)
-    ?? firstMatch(normalized, /\bclaim\b\s+(?:was\s+)?\b(denied|closed|open|approved|pending|paid)\b/);
+  const status = firstMatch(normalized, /\b(denied|closed|open|approved|pending|paid|settled|completed|in\s+progress)\b(?=\s+(?:\w+\s+){0,2}claim\b)/)
+    ?? firstMatch(normalized, /\bclaim\b\s+(?:was\s+)?\b(denied|closed|open|approved|pending|paid|settled|completed|in\s+progress)\b/);
   const dateReference = firstMatch(normalized, new RegExp(`\\b(${months})(?:\\s+\\d{4})?\\b`))
     ?? firstMatch(normalized, /\b(20\d{2})\b/);
   return {
     ...(claimType ? { claimType: claimType === "medical" ? "healthcare" : claimType === "automobile" ? "auto" : claimType } : {}),
-    ...(status ? { status: status === "paid" ? "closed" : status } : {}),
+    ...(status ? { status: ["paid", "settled", "completed"].includes(status) ? "closed" : status === "in progress" ? "open" : status } : {}),
     ...(dateReference ? { dateReference } : {}),
     ...(message.trim() ? { rawText: message } : {}),
   };

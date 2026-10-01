@@ -31,6 +31,18 @@ describe("claim processing and post-processing", () => {
     expect(result.text).toContain("office note");
   });
 
+  it("returns every claim for multi-claim follow-ups", () => {
+    for (const message of ["Talk about all of them?", "Explain every claim", "Can you summarize each case?"]) {
+      const result = service.answer({ partyId: "P9", intent: "general_claim_question", message });
+      expect(result.ok).toBe(true);
+      expect(result.claimId).toBeUndefined();
+      expect(result.text).toContain("You have 4 claims");
+      expect(result.facts?.find((fact) => fact.key === "claim_count")?.value).toBe("4");
+      expect(result.facts?.filter((fact) => fact.key === "claim_id")).toHaveLength(4);
+      expect(result.requiresHuman).toBeUndefined();
+    }
+  });
+
   it("answers document alternatives and follow-up questions", () => {
     const alternative = service.answer({ partyId: "P9", intent: "document_alternatives", claimId: "CL-2048", message: "I cannot get the office note" });
     expect(alternative.text).toContain("visit summary");

@@ -5,7 +5,7 @@ import type {
 import type { SessionState } from "../shared/types.js";
 import { isIdentityRefusal } from "./identity-service.js";
 
-const inScopePattern = /\b(?:insurance|claims?|cases?|matter|issue|policy|policyholder|identity|verify|verification|denial|denied|documents?|paperwork|submissions?|files?|appeal|processing|review|next|steps?|needed|reimburse|payment|status|coverage|summary|summarize|about|representative|human|agent)\b/i;
+const inScopePattern = /\b(?:insurance|claims?|cases?|matter|issue|policy|policyholder|identity|verify|verification|denial|denied|documents?|paperwork|submissions?|files?|appeal|processing|review|next|steps?|needed|reimburse|payment|status|coverage|summary|summarize|about|representative|human|agent|what\s+(?:do\s+i|i)\s+have|tell\s+me|talk\s+about|go\s+over|explain|all\s+of\s+them)\b/i;
 const explicitOutOfScopePattern = /\b(?:weather|recipe|recipes|sports?|football|basketball|news|politics|program(?:ming|me)|code|coding|javascript|typescript|math|mathematics|rl)\b/i;
 const questionPattern = /\?|\b(?:what|why|when|where|how|can|could|would|is|are|do|does)\b/i;
 const greetingPattern = /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))\b[!.\s]*$/i;
@@ -59,9 +59,11 @@ export function isOutOfScopeMessage(message: string): boolean {
   if (isCapabilityQuestion(normalized)) return false;
   if (/\b(?:what happened with it|what about it|tell me more|and what about that)\b/i.test(normalized)) return false;
   if (identityAnswerPattern.test(normalized)) return false;
-  if (inScopePattern.test(normalized)) return false;
   if (explicitOutOfScopePattern.test(normalized)) return true;
-  return questionPattern.test(normalized);
+  if (inScopePattern.test(normalized)) return false;
+  // Ambiguous questions are not automatically out of scope. The LLM gets the
+  // conversation context and can interpret them as claim-support requests.
+  return false;
 }
 
 /** Provides the authoritative scope, emotion, refusal, and transfer signals to the workflow. */

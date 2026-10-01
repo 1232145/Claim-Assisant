@@ -47,5 +47,15 @@
     "email_aliases": [
       "yawen.li@example.com"
     ]
+  },
+  {
+    "party_id": "P14",
+    "name": "Jordan Rivera",
+    "policy_number": "POL-5520",
+    "dob": "1992-07-24",
+    "id_type": "ssn_last4",
+    "id_last4": "6284",
+    "phone": "+16505550198",
+    "email": "jordan.rivera@example.com"
   }
 ]
